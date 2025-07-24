@@ -6,7 +6,6 @@ import argparse
 from argparse import RawTextHelpFormatter
 import multiprocessing
 import timeit
-import pdb
 
 global fastq1
 global fastq2
@@ -256,7 +255,6 @@ def compute_distance(pair):
     return pearson_def(vecA, vecB)
 
 def classifying():
-    print "in classifying"
     AUCs =[]
 
     wholeFeatures = 50
@@ -270,28 +268,21 @@ def classifying():
         altFreqList.append(glob_scores[key])
         keyList.append(key)
 
-    print len(glob_scores)
     dataSetSize = len(altFreqList)
-    print dataSetSize
 
     filter_list = []
 
-    # all unique non-overlapping pairs
+
     for i in range(0, dataSetSize):
         for j in range(0, dataSetSize):
             if i!=j:
                 if keyList[j] not in filter_list:
                     temp.append([keyList[i],keyList[j]])
         filter_list.append(keyList[i])
-    print len(temp)
 
     for iterations in range(49,wholeFeatures):
-        # features is a list of strings representing 0 to 21038 (hardcoded, always true as fastq = 1 in all scenarios)
-        # selected features is a subset of features present in both groups, unordered
-        # glob scores is a list of 21039 features which may or may not be non-zero
-        # testtest = map(int, selected_feature)
         samples = []
-        numFeatures = iterations #hard coded to 49. Not actually used again?
+        numFeatures = iterations 
 
         count = 0
 
@@ -300,8 +291,6 @@ def classifying():
         samples = pool.map(compute_distance, temp)
         pool.close()
         pool.join()
-
-        print len(samples)
 
 
         predStrength = []
@@ -318,18 +307,13 @@ def classifying():
         if out_tag!="stdout":
             out_f = open(outdir + "/" + out_tag + "_all.txt","w")
 
-        # Original - would write to same index several times. With 4k samples, there are about 4m pairs, which this loops through twice, for a matrix that should just be 4k x 4k
-        # This seems like it may be the bottleneck.
-        # Note - this design limits to all vs all comparisons. Other approach technically would be more flexible, however there is currently no implementation for subset vs subset comparisons. 
-        # If input vs second input is specified in the future, then all vs all comparisons 
+
         for i in range(0, len(keyList)):
             output_matrix[keyList[i]] = dict()
             for j in range(0,len(keyList)):
                 output_matrix[keyList[i]][keyList[j]] = 0
-        print "Created output matrix with size: ", len(output_matrix), "x", len(output_matrix)
 
         if training_flag == 1:
-            print "TRAINING FLAG SET??"
             #make training set
             for i in range(0,len(samples)):
                 trainMatrix= []
@@ -352,10 +336,6 @@ def classifying():
     #            print AUCs
         else :
             for i in range(0,len(samples)):
-                # temp contains the sample infos to access global dictionaries, samples contains the person dictionary, and shares indices with temp. temp and samples could be zipped together. 
-                # real depth and mean depth are globals
-                # output_matrix is a pre-allocated matrix but could probably be serially written too after the fact 
-                # ClassifyNV shouldn't take long but writing 4m lines might. 
                 depth =0
                 if Nonzero_flag:
                     depth = min(real_depth[temp[i][0].strip()],real_depth[temp[i][1].strip()])
@@ -661,10 +641,8 @@ if __name__ == '__main__':
         for i in range(0,21039): 
             features.append(str(i))     
 
-    print "max threads", maxthread
-    print "creating data set"
+
     createDataSetFromDir(base_dir,bedFile)
-    print "Classifying"
     classifying()
 
 

@@ -3,7 +3,7 @@ Patches to vaf_ncm.py by william pilcher -
 Adding -t argument to paralellize the computation of pearson correlations for large datasets
 Altered behavior for the initalization of the output_matrix with all 0s to iterate through keylist rather than samples list. Samples array will contain keylist^2 elements, and looping through this twice will redundantly write 0s to the same position. This computation time will scale quadratically with runtime.
 
-ISSUES: multiprocess.pool will copy the globals dictionaries. With 2,845 files, each process results in ~1GB extra memory. This can definitely be optimized but will require 
+ISSUES: multiprocess.pool will copy the globals dictionaries. With 2,845 files, each process results in ~1GB extra memory. This can definitely be optimized but will require more major restructuring.
 
 # [NGSCheckMate](https://github.com/parklab/NGSCheckMate/)
 
