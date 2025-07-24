@@ -5,6 +5,7 @@ Altered behavior for the initalization of the output_matrix with all 0s to itera
 
 ISSUES: multiprocess.pool will copy the globals dictionaries. With 2,845 files, each process results in ~1GB extra memory. This can definitely be optimized but will require more major restructuring.
 
+Added vaf_ncm_python3.py as drop in replacement when running in the bioconductor container.
 # [NGSCheckMate](https://github.com/parklab/NGSCheckMate/)
 
 [![DOI](https://zenodo.org/badge/49300513.svg)](https://zenodo.org/badge/latestdoi/49300513)  <img src="https://travis-ci.org/parklab/NGSCheckMate.svg?branch=master">
