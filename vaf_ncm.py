@@ -4,6 +4,9 @@ import math
 import subprocess, time
 import argparse
 from argparse import RawTextHelpFormatter
+import multiprocessing
+import timeit
+import pdb
 
 global fastq1
 global fastq2
@@ -37,6 +40,7 @@ def average(x):
     return float(sum(x)) / len(x)
 
 #Calulation of Pearson Correlation
+# If the vectors have 20 elements, say they do not match
 def pearson_def(x, y):
     assert len(x) == len(y)
     
@@ -73,7 +77,7 @@ def createDataSetFromDir(base_dir, bedFile):
                 
 #            if file.endswith("class_results.txt"):
 #                continue
-                
+   
             link = root + '/' +  file
             f = open(link, "r")
   #          dbsnpf= open(bedFile,"r")
@@ -235,9 +239,24 @@ def plotROC(predStrengths, classLabels):
     plt.show()
     print "the Area Under the Curve is: ",ySum*xStep
 
+def compute_distance(pair):
+    #pair contains two elements describing the keys to access the corresponding metrics in the global dictionaries (glob_scores, feature_list)
+    key0 = pair[0].strip()
+    key1 = pair[1].strip()
+    tempA = set(feature_list[key0]) #would remove non-zero elements
+    tempB = set(feature_list[key1])
 
+    selected_feature = tempA.intersection(tempB)
+
+    # moved to one liner for creating the subset vectors
+    alt_index_test = sorted(map(int, selected_feature))
+    vecA = [glob_scores[key0][idx] for idx in alt_index_test]
+    vecB = [glob_scores[key1][idx] for idx in alt_index_test]
+
+    return pearson_def(vecA, vecB)
 
 def classifying():
+    print "in classifying"
     AUCs =[]
 
     wholeFeatures = 50
@@ -251,42 +270,39 @@ def classifying():
         altFreqList.append(glob_scores[key])
         keyList.append(key)
 
+    print len(glob_scores)
     dataSetSize = len(altFreqList)
+    print dataSetSize
 
     filter_list = []
 
+    # all unique non-overlapping pairs
     for i in range(0, dataSetSize):
         for j in range(0, dataSetSize):
             if i!=j:
                 if keyList[j] not in filter_list:
                     temp.append([keyList[i],keyList[j]])
         filter_list.append(keyList[i])
+    print len(temp)
 
     for iterations in range(49,wholeFeatures):
-
+        # features is a list of strings representing 0 to 21038 (hardcoded, always true as fastq = 1 in all scenarios)
+        # selected features is a subset of features present in both groups, unordered
+        # glob scores is a list of 21039 features which may or may not be non-zero
+        # testtest = map(int, selected_feature)
         samples = []
-        numFeatures = iterations
+        numFeatures = iterations #hard coded to 49. Not actually used again?
 
         count = 0
 
-        for i in range(0,len(temp)):
-            tempA = set(feature_list[temp[i][0].strip()])
-            tempB = set(feature_list[temp[i][1].strip()])
+        # Moving the computation of pairwise correlations to a multiprocess map
+        pool = multiprocessing.Pool(maxthread)
+        samples = pool.map(compute_distance, temp)
+        pool.close()
+        pool.join()
 
-            selected_feature = tempA.intersection(tempB)
+        print len(samples)
 
-            vecA = []
-            vecB = []
-
-            idx = 0
-            for k in features:
-                if k in selected_feature:
-                    vecA.append(glob_scores[temp[i][0].strip()][idx])
-                    vecB.append(glob_scores[temp[i][1].strip()][idx])
-                idx = idx + 1
-
-            distance = pearson_def(vecA, vecB)
-            samples.append(distance)
 
         predStrength = []
         training_flag =0
@@ -302,12 +318,18 @@ def classifying():
         if out_tag!="stdout":
             out_f = open(outdir + "/" + out_tag + "_all.txt","w")
 
-        for i in range(0, len(samples)):
-            output_matrix[temp[i][0]] = dict()
-            for j in range(0,len(samples)):
-                output_matrix[temp[i][0]][temp[j][0]] = 0
+        # Original - would write to same index several times. With 4k samples, there are about 4m pairs, which this loops through twice, for a matrix that should just be 4k x 4k
+        # This seems like it may be the bottleneck.
+        # Note - this design limits to all vs all comparisons. Other approach technically would be more flexible, however there is currently no implementation for subset vs subset comparisons. 
+        # If input vs second input is specified in the future, then all vs all comparisons 
+        for i in range(0, len(keyList)):
+            output_matrix[keyList[i]] = dict()
+            for j in range(0,len(keyList)):
+                output_matrix[keyList[i]][keyList[j]] = 0
+        print "Created output matrix with size: ", len(output_matrix), "x", len(output_matrix)
 
         if training_flag == 1:
+            print "TRAINING FLAG SET??"
             #make training set
             for i in range(0,len(samples)):
                 trainMatrix= []
@@ -330,6 +352,10 @@ def classifying():
     #            print AUCs
         else :
             for i in range(0,len(samples)):
+                # temp contains the sample infos to access global dictionaries, samples contains the person dictionary, and shares indices with temp. temp and samples could be zipped together. 
+                # real depth and mean depth are globals
+                # output_matrix is a pre-allocated matrix but could probably be serially written too after the fact 
+                # ClassifyNV shouldn't take long but writing 4m lines might. 
                 depth =0
                 if Nonzero_flag:
                     depth = min(real_depth[temp[i][0].strip()],real_depth[temp[i][1].strip()])
@@ -546,7 +572,7 @@ if __name__ == '__main__':
     desired_depth = ""
     reference_length =""
     pattern_length = ""
-    maxthread =""
+    maxthread = 1
     PE = 0
     fastq1 = ""
     fastq2 = ""
@@ -569,6 +595,7 @@ if __name__ == '__main__':
  		        related individuals (parents-child, siblings)
           -nz           Use the mean of non-zero depths across the SNPs as a reference depth
  		        (default: Use the mean depth across all the SNPs)
+          -t    Number of Threads to use (default: 1)
             """
 
     parser = argparse.ArgumentParser(description=help, formatter_class=RawTextHelpFormatter)
@@ -584,7 +611,7 @@ if __name__ == '__main__':
     parser.add_argument('-N','--outfilename',metavar='output_filename',dest='outfilename',action='store',default="output",help='OutputFileName ( default : output ), -N filename')
     parser.add_argument('-f','--family_cutoff',dest='family_cutoff',action='store_true', help='apply strict correlation threshold to remove family cases') 
     parser.add_argument('-nz','--nonzero',dest='nonzero_read',action='store_true',help='Use non-zero mean depth of target loci as reference correlation. (default: Use mean depth of all target loci)')
-
+    parser.add_argument('-t','--threads',metavar='maxthread',dest='maxthread',action='store',default=1,help='Number of threads to use (default: 1)')
 
 
     args=parser.parse_args()
@@ -602,7 +629,7 @@ if __name__ == '__main__':
 
     # set directories
     base_dir = args.inputdirname
-
+    maxthread = int(args.maxthread)
     #base_dir = "/data/users/sjlee/valid_qc/WGS/SNP/MATCH/"
 
     #bedFile = "/data/users/sjlee/qc/disctinct_9755.bed"
@@ -628,12 +655,16 @@ if __name__ == '__main__':
         for i in key_order.readlines():
             temp = i.split('\t')
             features.append(str(temp[0])+"_"+str(temp[2]))
-            
+
+    # features is always a list of 0 to 21039        
     if fastq == 1:
-        for i in range(0,21039):
+        for i in range(0,21039): 
             features.append(str(i))     
 
+    print "max threads", maxthread
+    print "creating data set"
     createDataSetFromDir(base_dir,bedFile)
+    print "Classifying"
     classifying()
 
 
